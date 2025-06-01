@@ -40,5 +40,5 @@ sudo python3 attack.py -i enp4s0
     Username:   testuser
     Password:   testpass
 
-[+] Sent fake PAP ACK
+[+] Sent PAP ACK
 ```
