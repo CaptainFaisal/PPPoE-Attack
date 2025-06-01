@@ -16,7 +16,7 @@ sudo python3 attack.py
 For specific interface other than eth0, run
 
 ```bash
-sudo python3 attack.py -i enp4s0
+sudo python3 attack.py -i <your-interface>
 ```
 
 ### Example Output
