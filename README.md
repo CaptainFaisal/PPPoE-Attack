@@ -9,7 +9,7 @@ cd PPPoE-Attack
 ## Usage
 
 ### Basic Operation
-After connecting the router, run the code to get PPPoE credentials.
+After running the code, connect to the router through ethernet to get PPPoE credentials.
 ```bash
 sudo python3 attack.py
 ```
