@@ -441,7 +441,8 @@ class PPPoEServer:
 
                 print("\n\033[94m[!] \033[1mCaptured PPPoE Credentials:\033[0m")
                 print(f"    \033[1;33mUsername:   \033[0;32m{peer_id}\033[0m")
-                print(f"    \033[1;33mPassword:   \033[0;32m{password}\033[0m\n")
+                print(f"    \033[1;33mPassword:   \033[0;32m{password}\033[0m")
+                print(f"    \033[1;33mClient MAC address:    \033[0;32m{src_mac.hex(':')}\033[0m\n")
 
                 # Send ACK
                 msg = b"Authentication successful"
